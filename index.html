@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050807">
+<title>Ghostwire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one phone-height terminal. Spectrum scope on top, chat log fills the middle, transmit bar pinned at the bottom. */
+:root {
+  --bg: #050807;
+  --panel: #0a110e;
+  --line: #17271f;
+  --fg: #b8f5d0;
+  --dim: #5d8a70;
+  --hot: #39ff9c;
+  --warn: #ffb347;
+  --bad: #ff5c6c;
+  --display: "VT323", "Courier New", monospace;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 var(--mono);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent;
+}
+body::after { /* faint CRT scanlines */
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px);
+}
+.app {
+  height: 100%; max-width: 640px; margin: 0 auto;
+  display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font: 44px/1 var(--display); margin: 0; color: var(--hot); letter-spacing: 2px; text-shadow: 0 0 12px rgba(57,255,156,.45); }
+.status { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.status[data-s="listen"] .dot { background: var(--hot); box-shadow: 0 0 8px var(--hot); }
+.status[data-s="tx"] .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.status[data-s="rx"] .dot { background: var(--hot); animation: blink .25s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+
+.scope { border: 1px solid var(--line); background: var(--panel); position: relative; }
+canvas { display: block; width: 100%; height: 110px; }
+.scope-meta { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; font-size: 11px; color: var(--dim); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+
+.log { overflow-y: auto; min-height: 0; border: 1px solid var(--line); background: var(--panel); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.msg { min-width: 0; overflow-wrap: anywhere; }
+.msg .meta { font-size: 11px; color: var(--dim); letter-spacing: .06em; }
+.msg .meta b { font-weight: 600; }
+.msg.tx .meta b { color: var(--warn); }
+.msg.rx .meta b { color: var(--hot); }
+.msg.sys { color: var(--dim); font-size: 12px; }
+.msg.bad .body { color: var(--bad); }
+.msg .body::before { content: "> "; color: var(--dim); }
+.msg.sys .body::before { content: "# "; }
+.incoming { color: var(--hot); }
+.incoming .body::after { content: "█"; animation: blink .5s steps(2) infinite; }
+
+.controls { display: grid; gap: 8px; }
+.row { display: flex; gap: 8px; }
+input[type=text] {
+  flex: 1; min-width: 0; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); padding: 12px; font: 16px var(--mono); border-radius: 0;
+}
+input[type=text]:focus { outline: none; border-color: var(--hot); }
+#handle { flex: 0 0 9.5em; font-size: 14px; padding: 8px 10px; }
+button {
+  font: 600 13px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  background: transparent; color: var(--hot); border: 1px solid var(--hot);
+  padding: 0 16px; min-height: 44px; cursor: pointer; border-radius: 0;
+}
+button:hover:not(:disabled), button:focus-visible { background: var(--hot); color: var(--bg); outline: none; }
+button:disabled { color: var(--dim); border-color: var(--line); cursor: not-allowed; }
+button.big { width: 100%; font-size: 15px; min-height: 52px; }
+.mode { display: flex; border: 1px solid var(--line); }
+.mode button { border: 0; min-height: 34px; font-size: 11px; padding: 0 10px; color: var(--dim); }
+.mode button[aria-pressed="true"] { background: var(--line); color: var(--fg); }
+.hint { font-size: 11px; color: var(--dim); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>GHOSTWIRE</h1>
+    <div class="status" id="status" data-s="off"><span class="dot"></span><span id="statusText">offline</span></div>
+  </header>
+
+  <div class="scope">
+    <canvas id="scope" aria-label="Live frequency spectrum of the channel"></canvas>
+    <div class="scope-meta"><span id="band">band 17.5–19.3 kHz</span><span id="peak">peak —</span></div>
+  </div>
+
+  <div class="log" id="log" aria-live="polite">
+    <div class="msg sys"><div class="body">Ghostwire sends text between phones as high-pitched sound. No Wi-Fi, no Bluetooth, just speaker to mic.</div></div>
+    <div class="msg sys"><div class="body">Open this page on two phones, tap Power on on both, pick the same band, then type.</div></div>
+  </div>
+
+  <div class="controls">
+    <button class="big" id="power">Power on</button>
+    <div class="row" id="sendRow" hidden>
+      <input type="text" id="msg" maxlength="100" placeholder="type a message…" autocomplete="off" enterkeyhint="send">
+      <button id="send">Send</button>
+    </div>
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <input type="text" id="handle" maxlength="12" placeholder="handle" autocomplete="off" aria-label="Your handle">
+      <div class="mode" role="group" aria-label="Band">
+        <button id="modeUltra" aria-pressed="true">Ultrasonic</button>
+        <button id="modeAudible" aria-pressed="false">Dial-up</button>
+      </div>
+    </div>
+    <p class="hint">Phones about 1 m apart, volume up, silent mode off. Dial-up band is audible and more reliable if ultrasonic struggles.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- protocol ----------
+  // 19 tones: 0-16 carry data, 17 = START, 18 = END.
+  // Each 4-bit nibble v picks tone (prev + 1 + v) % 17, so two symbols in a row
+  // are never the same tone and the receiver can split them without a clock.
+  const BANDS = {
+    ultra:   { base: 17500, step: 100, label: "band 17.5–19.3 kHz" },
+    audible: { base: 1200,  step: 120, label: "band 1.2–3.4 kHz (audible)" },
+  };
+  const NDATA = 17, START = 17, END = 18, NTONES = 19;
+  const SYM = 0.09, START_LEN = 0.22, END_LEN = 0.14, VOL = 0.6;
+  const STABLE = 3;            // polls a tone must hold before it counts
+  const SNR_DB = 14;           // how far the best tone must sit above the rest
+  const MAX_LEN = 120;
+
+  let mode = "ultra";
+  const freqOf = i => BANDS[mode].base + i * BANDS[mode].step;
+
+  function crc8(bytes) {
+    let c = 0;
+    for (const b of bytes) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = (c & 0x80) ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff;
+    }
+    return c;
+  }
+  function packet(text) {
+    let payload = new TextEncoder().encode(text);
+    if (payload.length > MAX_LEN) payload = payload.slice(0, MAX_LEN);
+    return [payload.length, ...payload, crc8(payload)];
+  }
+  function tonesFor(bytes) {
+    const out = [START];
+    let prev = 0;
+    for (const b of bytes) for (const v of [b >> 4, b & 15]) {
+      prev = (prev + 1 + v) % NDATA;
+      out.push(prev);
+    }
+    out.push(END);
+    return out;
+  }
+
+  // ---------- audio ----------
+  let ctx = null, analyser = null, bins = null, stream = null;
+  let sendingUntil = 0;
+
+  async function powerOn() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    const src = ctx.createMediaStreamSource(stream);
+    attachAnalyser(src);
+  }
+  function attachAnalyser(node) {
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0;
+    bins = new Float32Array(analyser.frequencyBinCount);
+    node.connect(analyser);
+    setInterval(poll, 12);
+    requestAnimationFrame(draw);
+  }
+
+  function transmit(text, dest) {
+    const tones = tonesFor(packet(text));
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = "sine";
+    osc.connect(g).connect(dest || ctx.destination);
+    const t0 = ctx.currentTime + 0.05;
+    let t = t0;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(VOL, t0 + 0.015);
+    tones.forEach((tone, i) => {
+      osc.frequency.setValueAtTime(freqOf(tone), t);
+      t += i === 0 ? START_LEN : (tone === END ? END_LEN : SYM);
+    });
+    g.gain.setValueAtTime(VOL, t - 0.015);
+    g.gain.linearRampToValueAtTime(0, t);
+    osc.start(t0);
+    osc.stop(t + 0.02);
+    const secs = t - ctx.currentTime;
+    if (!dest) sendingUntil = performance.now() + secs * 1000 + 250;
+    return new Promise(r => { osc.onended = r; });
+  }
+
+  // ---------- receiver ----------
+  let cand = -1, candCount = 0, accepted = -1, rx = null, lastLevels = null, peakTone = -1;
+
+  function toneLevels() {
+    const hz = ctx.sampleRate / analyser.fftSize;
+    const lv = new Array(NTONES);
+    for (let i = 0; i < NTONES; i++) {
+      const b = Math.round(freqOf(i) / hz);
+      lv[i] = Math.max(bins[b - 1], bins[b], bins[b + 1]);
+    }
+    return lv;
+  }
+
+  function poll() {
+    analyser.getFloatFrequencyData(bins);
+    const lv = toneLevels();
+    lastLevels = lv;
+    let best = 0;
+    for (let i = 1; i < NTONES; i++) if (lv[i] > lv[best]) best = i;
+    const sorted = [...lv].sort((a, b) => a - b);
+    const median = sorted[NTONES >> 1];
+    const tone = (lv[best] - median > SNR_DB && lv[best] > -110) ? best : -1;
+    peakTone = tone;
+
+    if (performance.now() < sendingUntil) { cand = -1; candCount = 0; accepted = -1; return; }
+
+    if (tone === cand) candCount++; else { cand = tone; candCount = 1; }
+    if (candCount === STABLE) {
+      if (tone === -1) accepted = -1;
+      else if (tone !== accepted) { accepted = tone; onSymbol(tone); }
+    }
+    if (rx && performance.now() - rx.last > 700) { fail("signal lost"); }
+  }
+
+  function onSymbol(tone) {
+    const now = performance.now();
+    if (tone === START) { rx = { prev: 0, nib: [], bytes: [], last: now }; setStatus("rx", "receiving"); showIncoming(""); return; }
+    if (!rx) return;
+    if (tone === END) { fail(rx.bytes.length ? "message cut short" : null); return; }
+    rx.last = now;
+    const v = (tone - rx.prev - 1 + 2 * NDATA) % NDATA;
+    rx.prev = tone;
+    if (v > 15) { fail("bad symbol"); return; }
+    rx.nib.push(v);
+    if (rx.nib.length === 2) {
+      rx.bytes.push((rx.nib[0] << 4) | rx.nib[1]);
+      rx.nib = [];
+      const len = rx.bytes[0];
+      if (len > MAX_LEN) { fail("bad length"); return; }
+      const body = rx.bytes.slice(1, 1 + len);
+      showIncoming(scramble(body, len));
+      if (rx.bytes.length === len + 2) {
+        const ok = crc8(body) === rx.bytes[len + 1];
+        finish(new TextDecoder().decode(new Uint8Array(body)), ok);
+      }
+    }
+  }
+  function scramble(body, len) {
+    const glyphs = "#$%&*+=?@01";
+    const known = new TextDecoder().decode(new Uint8Array(body)).replace(/�/g, "");
+    let tail = "";
+    for (let i = body.length; i < len; i++) tail += glyphs[(Math.random() * glyphs.length) | 0];
+    return known + tail;
+  }
+  function finish(text, ok) {
+    rx = null; clearIncoming(); setStatus("listen", "listening");
+    const sep = text.indexOf("\u001f");
+    const who = sep >= 0 ? text.slice(0, sep) : "unknown";
+    const body = sep >= 0 ? text.slice(sep + 1) : text;
+    addMsg(ok ? "rx" : "rx bad", who || "anon", ok ? body : body + "  [checksum failed, some characters may be wrong]");
+    if (navigator.vibrate) try { navigator.vibrate(ok ? 40 : [30, 40, 30]); } catch (e) {}
+    window.GW_last = { text: body, ok };
+  }
+  function fail(reason) {
+    rx = null; clearIncoming(); setStatus("listen", "listening");
+    if (reason) addMsg("sys", null, "Lost a transmission (" + reason + "). Try moving closer or turning the volume up.");
+  }
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  const log = $("log");
+  let incomingEl = null;
+
+  function setStatus(s, text) { $("status").dataset.s = s; $("statusText").textContent = text; }
+  function stamp() { return new Date().toTimeString().slice(0, 8); }
+  function addMsg(kind, who, text) {
+    const el = document.createElement("div");
+    el.className = "msg " + kind;
+    if (who !== null) {
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const b = document.createElement("b");
+      b.textContent = who;
+      meta.append(b, " · " + stamp() + (kind.startsWith("tx") ? " · sent" : " · received"));
+      el.append(meta);
+    }
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = text;
+    el.append(body);
+    log.append(el);
+    log.scrollTop = log.scrollHeight;
+  }
+  function showIncoming(text) {
+    if (!incomingEl) {
+      incomingEl = document.createElement("div");
+      incomingEl.className = "msg incoming";
+      incomingEl.innerHTML = '<div class="meta">incoming transmission…</div><div class="body"></div>';
+      log.append(incomingEl);
+    }
+    incomingEl.querySelector(".body").textContent = text;
+    log.scrollTop = log.scrollHeight;
+  }
+  function clearIncoming() { if (incomingEl) { incomingEl.remove(); incomingEl = null; } }
+
+  function setMode(m) {
+    mode = m;
+    $("modeUltra").setAttribute("aria-pressed", m === "ultra");
+    $("modeAudible").setAttribute("aria-pressed", m === "audible");
+    $("band").textContent = BANDS[m].label;
+    try { localStorage.setItem("gw-mode", m); } catch (e) {}
+  }
+  $("modeUltra").onclick = () => setMode("ultra");
+  $("modeAudible").onclick = () => setMode("audible");
+
+  const handleEl = $("handle");
+  try { handleEl.value = localStorage.getItem("gw-handle") || ""; setMode(localStorage.getItem("gw-mode") || "ultra"); } catch (e) {}
+  if (!handleEl.value) handleEl.value = "ghost" + Math.floor(100 + Math.random() * 900);
+  handleEl.oninput = () => { try { localStorage.setItem("gw-handle", handleEl.value); } catch (e) {} };
+
+  $("power").onclick = async () => {
+    $("power").disabled = true;
+    $("power").textContent = "Starting…";
+    try {
+      await powerOn();
+      $("power").hidden = true;
+      $("sendRow").hidden = false;
+      setStatus("listen", "listening");
+      addMsg("sys", null, "Mic is live. Listening on " + BANDS[mode].label.replace("band ", "") + ".");
+      try { await navigator.wakeLock?.request("screen"); } catch (e) {}
+    } catch (e) {
+      $("power").disabled = false;
+      $("power").textContent = "Power on";
+      addMsg("sys", null, "Couldn't turn on the microphone (" + (e.name || e) + "). Allow mic access for this site in your browser settings, then try again.");
+    }
+  };
+
+  let busy = false;
+  async function send() {
+    const text = $("msg").value.trim();
+    if (!text || busy || !ctx) return;
+    busy = true; $("send").disabled = true;
+    const who = handleEl.value.trim() || "anon";
+    setStatus("tx", "transmitting");
+    addMsg("tx", who, text);
+    $("msg").value = "";
+    await ctx.resume();
+    await transmit(who + "\u001f" + text);
+    setStatus("listen", "listening");
+    busy = false; $("send").disabled = false;
+  }
+  $("send").onclick = send;
+  $("msg").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+  // ---------- scope ----------
+  const cv = $("scope"), g2 = cv.getContext("2d");
+  function draw() {
+    requestAnimationFrame(draw);
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g2.clearRect(0, 0, w, h);
+    if (!bins) return;
+    const hz = ctx.sampleRate / analyser.fftSize;
+    const lo = freqOf(0) - 2 * BANDS[mode].step, hi = freqOf(NTONES - 1) + 2 * BANDS[mode].step;
+    const x = f => (f - lo) / (hi - lo) * w;
+    const y = db => h - Math.max(0, Math.min(1, (db + 130) / 100)) * (h - 8);
+    // tone markers
+    for (let i = 0; i < NTONES; i++) {
+      const xi = x(freqOf(i));
+      g2.fillStyle = i === peakTone ? "rgba(57,255,156,.35)" : (i >= START ? "rgba(255,179,71,.18)" : "rgba(57,255,156,.08)");
+      g2.fillRect(xi - 2, 0, 4, h);
+    }
+    // spectrum trace
+    g2.beginPath();
+    for (let b = Math.floor(lo / hz); b <= Math.ceil(hi / hz) && b < bins.length; b++) {
+      const px = x(b * hz), py = y(bins[b]);
+      b === Math.floor(lo / hz) ? g2.moveTo(px, py) : g2.lineTo(px, py);
+    }
+    g2.strokeStyle = "#39ff9c"; g2.lineWidth = 1.5;
+    g2.shadowColor = "#39ff9c"; g2.shadowBlur = 6;
+    g2.stroke(); g2.shadowBlur = 0;
+    $("peak").textContent = peakTone >= 0 ? "peak " + (freqOf(peakTone) / 1000).toFixed(2) + " kHz" : "peak —";
+  }
+
+  // Loopback self-test hook (wires the transmitter straight into the receiver).
+  window.GW = {
+    async loopback(text, m) {
+      if (m) setMode(m);
+      ctx = new AudioContext(); await ctx.resume();
+      const bus = ctx.createGain();
+      attachAnalyser(bus);
+      window.GW_last = null;
+      await transmit("test\u001f" + text, bus);
+      await new Promise(r => setTimeout(r, 400));
+      return window.GW_last;
+    }
+  };
+})();
+</script>
+</body>
+</html>
