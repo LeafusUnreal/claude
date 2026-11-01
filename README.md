@@ -20,3 +20,7 @@ No Wi-Fi or Bluetooth link between the phones.
 The page needs HTTPS for microphone access. Turn on GitHub Pages
 (Settings → Pages → deploy from this branch, `/ (root)`) and open the link on
 two phones.
+
+## Also in this repo
+
+- [`kuruma/`](kuruma/) — Kuruma-chan, a car that reacts to your driving in Japanese.
