@@ -16,23 +16,35 @@ the phone's Japanese text-to-speech voice:
 
 Every line shows up on screen with an English subtitle.
 
-## Run it
+## Install it
 
-It needs HTTPS for the motion sensors. With GitHub Pages on (Settings → Pages →
-deploy from branch, `/ (root)`), open `https://<you>.github.io/<repo>/kuruma/`
-on your phone.
+Send your mates the link: `https://<you>.github.io/<repo>/kuruma/`
+(GitHub Pages needs to be on: Settings → Pages → deploy from a branch, `/ (root)`).
 
-1. **Get a Japanese voice.** Android: Settings → Text-to-speech → Google →
-   install Japanese. iPhone: Settings → Accessibility → Spoken Content → Voices
-   → Japanese (Kyoko/Otoya, or a Siri voice). Pick it under Settings in the app.
-2. **Mount the phone** in portrait, screen facing you (lying flat with the top
-   pointing forward works too).
-3. Tap **Start** and allow motion access. The screen stays on while it runs.
-4. Pick **Normal** or **Sport**. The app can't read your car's drive mode, so
-   you set it here, before you drive.
-5. If accelerating shows up as braking on the G-meter, open Settings → **Teach
-   forward** and pull away in a straight line. If left and right are swapped,
-   tick **Flip left/right**.
+The first time it opens, a setup screen walks them through it for Samsung,
+other Android phones or iPhone. It reopens from the **?** button.
+
+1. **Install it.** Android Chrome: tap **Install Kuruma-chan** (or ⋮ → Add to
+   home screen). iPhone Safari: Share → **Add to Home Screen**. It gets its own
+   icon, opens full screen, and works offline once it has been opened once.
+2. **Get a Japanese voice.** The app speaks with the phone's own text-to-speech.
+   - Samsung: Settings → General management → Text-to-speech output → Preferred
+     engine **Speech Services by Google** → ⚙️ → Install voice data → Japanese.
+   - Other Android: Settings → System → Languages → Text-to-speech output →
+     same as above.
+   - iPhone: Settings → Accessibility → Spoken Content → Voices → Japanese.
+
+   Then tap **Test voice** on the setup screen.
+3. **Drive.** Mount the phone upright, screen facing you. Pick Normal or Sport
+   (the app can't read your car's real mode), tap Start, and keep the app on
+   screen.
+
+If accelerating shows up as braking on the G-meter, use Settings → **Teach
+forward** and pull away in a straight line. If left and right are swapped, tick
+**Flip left/right**.
+
+Updates reach everyone automatically: the app checks for a new version each
+time it opens with signal.
 
 On a laptop, drag the dot on the G-meter to fake forces, or use the "Try the
 lines" buttons.

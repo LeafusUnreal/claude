@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0b14">
 <title>Kuruma-chan</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kuruma-chan">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -104,13 +111,42 @@ input[type=range] { accent-color: var(--pink); }
 .log li b { color: var(--fg); font-weight: 700; }
 
 footer { font-size: 12px; color: var(--dim); }
+.head-r { display: flex; align-items: center; gap: 12px; }
+.help { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 16px; }
+
+/* First-run setup: a full-screen sheet of numbered steps over the app. */
+.setup {
+  position: fixed; inset: 0; z-index: 10; overflow-y: auto; background: var(--bg);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.setup .app { gap: 12px; }
+.setup h2 { margin: 6px 0 0; font-size: 24px; font-weight: 800; }
+.setup .lead { margin: 0; color: var(--dim); }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 10px; }
+.step h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+.step h3 .n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--pink); color: #fff; font-size: 14px; display: grid; place-items: center; }
+.step h3 .ok { margin-left: auto; color: var(--cyan); font-size: 14px; font-weight: 700; }
+.step ol, .step ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.step p { margin: 0; }
+.step .warn { color: var(--warn); }
+.step b { color: var(--fg); }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tabs button { font-size: 13px; padding: 9px 4px; }
+.tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.result { font-size: 14px; min-height: 1.4em; }
+.result.good { color: var(--cyan); }
+.result.bad { color: var(--warn); }
+.setup .go { margin-top: 4px; }
 </style>
 </head>
 <body>
 <main class="app">
   <header>
     <h1>くるま<span>ちゃん</span></h1>
-    <div class="status" id="status" data-s="off"><span class="dot"></span><span id="statusText">off</span></div>
+    <div class="head-r">
+      <div class="status" id="status" data-s="off"><span class="dot"></span><span id="statusText">off</span></div>
+      <button class="help" id="openSetup" aria-label="Setup and install guide">?</button>
+    </div>
   </header>
 
   <section class="bubble" id="bubble" aria-live="polite">
@@ -188,6 +224,50 @@ footer { font-size: 12px; color: var(--dim); }
 
   <footer>Set it up before you drive, then leave the phone alone. The screen stays on while it's running. Drive safely, she's only a little dramatic.</footer>
 </main>
+
+<section class="setup" id="setup" hidden aria-label="Setup">
+  <div class="app">
+    <h2>はじめまして！</h2>
+    <p class="lead">Three quick steps and Kuruma-chan's ready to ride.</p>
+
+    <div class="tabs" role="group" aria-label="Your phone">
+      <button data-os="samsung">Samsung</button>
+      <button data-os="android">Other Android</button>
+      <button data-os="ios">iPhone</button>
+    </div>
+
+    <div class="step" id="stepBrowser" hidden>
+      <h3><span class="n">!</span>Open it in the right browser</h3>
+      <p class="warn" id="browserWarn"></p>
+    </div>
+
+    <div class="step">
+      <h3><span class="n">1</span>Install the app<span class="ok" id="installOk" hidden>✓ installed</span></h3>
+      <div id="installHow"></div>
+      <button class="go" id="installBtn" hidden>Install Kuruma-chan</button>
+    </div>
+
+    <div class="step">
+      <h3><span class="n">2</span>Get a Japanese voice</h3>
+      <p>She speaks with your phone's own text-to-speech, which needs Japanese downloaded:</p>
+      <ol id="voiceHow"></ol>
+      <button id="testVoice">🔊 Test voice</button>
+      <p class="result" id="testResult" aria-live="polite"></p>
+    </div>
+
+    <div class="step">
+      <h3><span class="n">3</span>Drive</h3>
+      <ul>
+        <li>Put the phone in a mount, <b>upright, screen facing you</b>.</li>
+        <li>Pick <b>Normal</b> or <b>Sport</b>, then tap <b>Start</b> before you set off. Don't fiddle with it while driving.</li>
+        <li>Keep the app open on screen. She can't feel anything when the screen's off.</li>
+        <li>If accelerating shows up as braking, open Settings → <b>Teach forward</b> and pull away in a straight line.</li>
+      </ul>
+    </div>
+
+    <button class="go" id="closeSetup">出発！ · Let's go</button>
+  </div>
+</section>
 
 <script>
 "use strict";
@@ -328,7 +408,7 @@ function pick(setName) {
 }
 
 let talkTimer = 0;
-function say(setName) {
+function say(setName, done) {
   const set = LINES[setName];
   const [ja, en] = pick(setName);
   el.ja.textContent = ja;
@@ -338,15 +418,15 @@ function say(setName) {
   clearTimeout(talkTimer);
   talkTimer = setTimeout(() => el.bubble.classList.remove("talk"), 2500);
   addLog(ja, en);
-  if (!synth) { showMsg("This browser can't speak. Try Chrome or Safari."); return; }
-  speak(ja, VOICE[set.v], speechLevel);
+  if (!synth) { showMsg("This browser can't speak. Try Chrome or Safari."); done?.("no-speech-support"); return; }
+  speak(ja, VOICE[set.v], speechLevel, done);
 }
 
 /* Some Android engines fail ("synthesis-failed") when a voice is picked by name or the pitch is extreme.
    On failure, step down: 0 = chosen voice + styled pitch, 1 = system Japanese voice + milder pitch,
    2 = system Japanese voice, plain pitch. The level that works is remembered. */
 let speechLevel = store.get("speechLevel", 0);
-function speak(text, style, level) {
+function speak(text, style, level, done) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "ja-JP";
   if (level === 0) {
@@ -357,13 +437,18 @@ function speak(text, style, level) {
   u.pitch = level === 0 ? pitch : level === 1 ? Math.min(pitch, 1.5) : 1;
   u.rate = level === 2 ? 1 : style.rate;
   u.volume = Number(cfg.vol);
+  let settled = false;
+  const finish = r => { if (!settled) { settled = true; clearTimeout(watchdog); done?.(r); } };
+  const watchdog = done ? setTimeout(() => finish("no-response"), 5000) : 0;
   u.onstart = () => {
+    finish(true);
     showMsg("");
     if (level !== speechLevel) { speechLevel = level; store.set("speechLevel", level); }
   };
   u.onerror = e => {
-    if (e.error === "interrupted" || e.error === "canceled") return;
-    if (e.error === "synthesis-failed" && level < 2) return speak(text, style, level + 1);
+    if (e.error === "interrupted" || e.error === "canceled") return finish(e.error);
+    if (e.error === "synthesis-failed" && level < 2) { settled = true; clearTimeout(watchdog); return speak(text, style, level + 1, done); }
+    finish(e.error);
     showMsg("Speech failed: " + e.error + ". " + VOICE_HELP);
   };
   // A new reaction cuts off the old one. Some Chrome builds drop a line spoken right after cancel(),
@@ -708,6 +793,104 @@ el.flip.addEventListener("change", () => { cfg.flip = el.flip.checked; store.set
 el.teach.addEventListener("click", () => (S.teach ? teachEnd() : teachStart()));
 el.resetFwd.addEventListener("click", () => { cfg.fwd = null; store.set("fwd", null); updateFwdHint(); });
 document.querySelectorAll("[data-test]").forEach(b => b.addEventListener("click", () => say(b.dataset.test)));
+
+/* ---------- Setup & install ---------- */
+const ua = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isAndroid = /Android/.test(ua);
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const setupEl = $("setup");
+let installPrompt = null;
+
+const HOW = {
+  samsung: {
+    install: "In <b>Chrome</b>, tap <b>Install Kuruma-chan</b> below. No button? Tap <b>⋮</b> (top right) → <b>Add to home screen</b> → <b>Install</b>.",
+    voice: [
+      "Phone <b>Settings</b> → <b>General management</b> → <b>Text-to-speech output</b>.",
+      "<b>Preferred engine</b> → <b>Speech Services by Google</b>. Not listed? Install it from the Play Store first.",
+      "Tap <b>⚙️</b> next to it → <b>Install voice data</b> → <b>Japanese (日本)</b> → download. Wait until it says installed.",
+      "Close Kuruma-chan fully (swipe it away), reopen it, then test below.",
+    ],
+  },
+  android: {
+    install: "In <b>Chrome</b>, tap <b>Install Kuruma-chan</b> below. No button? Tap <b>⋮</b> (top right) → <b>Add to home screen</b> → <b>Install</b>.",
+    voice: [
+      "Phone <b>Settings</b> → <b>System</b> → <b>Languages</b> → <b>Text-to-speech output</b>. (Or search settings for \"text-to-speech\".)",
+      "<b>Preferred engine</b> → <b>Speech Services by Google</b>.",
+      "Tap <b>⚙️</b> → <b>Install voice data</b> → <b>Japanese (日本)</b> → download. Wait until it says installed.",
+      "Close Kuruma-chan fully (swipe it away), reopen it, then test below.",
+    ],
+  },
+  ios: {
+    install: "In <b>Safari</b>, tap <b>Share</b> (the square with an arrow) → <b>Add to Home Screen</b> → <b>Add</b>.",
+    voice: [
+      "<b>Settings</b> → <b>Accessibility</b> → <b>Spoken Content</b> → <b>Voices</b> → <b>Japanese</b>.",
+      "Download <b>Kyoko</b> (or any Japanese voice).",
+      "Turn <b>Silent mode off</b> (side switch, or Control Centre on newer iPhones) and turn the volume up.",
+      "Close Kuruma-chan fully, reopen it, then test below.",
+    ],
+  },
+};
+
+function setupOS(os) {
+  document.querySelectorAll("[data-os]").forEach(b => b.setAttribute("aria-pressed", b.dataset.os === os));
+  $("installHow").innerHTML = "<p>" + HOW[os].install + "</p>";
+  $("voiceHow").innerHTML = HOW[os].voice.map(t => "<li>" + t + "</li>").join("");
+  refreshInstall();
+}
+function refreshInstall() {
+  const installed = isStandalone();
+  $("installOk").hidden = !installed;
+  $("installHow").hidden = installed;
+  $("installBtn").hidden = installed || !installPrompt;
+}
+function browserWarning() {
+  if (/SamsungBrowser/.test(ua)) return "You're in Samsung Internet, which usually can't speak. Copy the link and open it in Chrome.";
+  if (/Firefox|FxiOS/.test(ua)) return "Firefox can't install this or use the Japanese voice properly. Open the link in " + (isIOS ? "Safari." : "Chrome.");
+  if (/FBAN|FBAV|Instagram|Snapchat|Line\//.test(ua)) return "You're inside another app's browser. Tap the menu and choose “Open in " + (isIOS ? "Safari" : "Chrome") + "”.";
+  if (isIOS && /CriOS|EdgiOS|OPiOS/.test(ua)) return "On iPhone, installing works best from Safari. Open the link there.";
+  return "";
+}
+function openSetup() {
+  const warn = browserWarning();
+  $("stepBrowser").hidden = !warn;
+  $("browserWarn").textContent = warn;
+  setupOS(store.get("os", isIOS ? "ios" : isAndroid && /SM-|Samsung/i.test(ua) ? "samsung" : isAndroid ? "android" : "samsung"));
+  $("testResult").textContent = ""; $("testResult").className = "result";
+  setupEl.hidden = false;
+  setupEl.scrollTop = 0;
+}
+function closeSetup() { setupEl.hidden = true; store.set("setupDone", true); }
+
+document.querySelectorAll("[data-os]").forEach(b => b.addEventListener("click", () => { store.set("os", b.dataset.os); setupOS(b.dataset.os); }));
+$("openSetup").addEventListener("click", openSetup);
+$("closeSetup").addEventListener("click", closeSetup);
+$("testVoice").addEventListener("click", () => {
+  const out = $("testResult");
+  out.className = "result"; out.textContent = "Listening…";
+  loadVoices();
+  speechLevel = 0;
+  say("start", r => {
+    if (r === true) { out.className = "result good"; out.textContent = "✓ She's talking! If you can't hear her, turn the media volume up."; return; }
+    out.className = "result bad";
+    out.textContent = !jaVoices.length
+      ? "✗ No Japanese voice yet. Do the steps above, then fully close and reopen the app."
+      : "✗ Couldn't speak (" + r + "). The Japanese voice is probably still downloading, or not finished installing. Check step 3 above, then reopen the app.";
+  });
+});
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; refreshInstall(); });
+window.addEventListener("appinstalled", () => { installPrompt = null; refreshInstall(); });
+$("installBtn").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null; refreshInstall();
+});
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+if (!store.get("setupDone", false)) openSetup();
 
 // restore UI
 setMode(cfg.mode, false);
