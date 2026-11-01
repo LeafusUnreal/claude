@@ -300,7 +300,7 @@ const el = {
 
 /* ---------- Speech ---------- */
 const synth = window.speechSynthesis;
-const VOICE_HELP = "Check the volume (media volume, not ringer) and the iPhone silent switch. Android: Settings → Text-to-speech → Google → install Japanese. iPhone: Settings → Accessibility → Spoken Content → Voices → Japanese.";
+const VOICE_HELP = "Check the volume (media volume, not ringer) and the iPhone silent switch. Android: make sure the Japanese voice data has actually finished downloading (Samsung: Settings → General management → Text-to-speech output → Preferred engine: Speech Services by Google → ⚙️ → Install voice data → Japanese). iPhone: Settings → Accessibility → Spoken Content → Voices → Japanese.";
 let jaVoices = [];
 function loadVoices() {
   if (!synth) return;
@@ -339,16 +339,33 @@ function say(setName) {
   talkTimer = setTimeout(() => el.bubble.classList.remove("talk"), 2500);
   addLog(ja, en);
   if (!synth) { showMsg("This browser can't speak. Try Chrome or Safari."); return; }
-  const style = VOICE[set.v];
-  const u = new SpeechSynthesisUtterance(ja);
+  speak(ja, VOICE[set.v], speechLevel);
+}
+
+/* Some Android engines fail ("synthesis-failed") when a voice is picked by name or the pitch is extreme.
+   On failure, step down: 0 = chosen voice + styled pitch, 1 = system Japanese voice + milder pitch,
+   2 = system Japanese voice, plain pitch. The level that works is remembered. */
+let speechLevel = store.get("speechLevel", 0);
+function speak(text, style, level) {
+  const u = new SpeechSynthesisUtterance(text);
   u.lang = "ja-JP";
-  const v = jaVoices.find(v => v.name === cfg.voice) || jaVoices[0];
-  if (v) u.voice = v;
-  u.pitch = Math.max(0, Math.min(2, style.pitch + Number(cfg.pitch)));
-  u.rate = style.rate;
+  if (level === 0) {
+    const v = jaVoices.find(v => v.name === cfg.voice) || jaVoices[0];
+    if (v) u.voice = v;
+  }
+  const pitch = Math.max(0, Math.min(2, style.pitch + Number(cfg.pitch)));
+  u.pitch = level === 0 ? pitch : level === 1 ? Math.min(pitch, 1.5) : 1;
+  u.rate = level === 2 ? 1 : style.rate;
   u.volume = Number(cfg.vol);
-  u.onstart = () => showMsg("");
-  u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") showMsg("Speech failed: " + e.error + ". " + VOICE_HELP); };
+  u.onstart = () => {
+    showMsg("");
+    if (level !== speechLevel) { speechLevel = level; store.set("speechLevel", level); }
+  };
+  u.onerror = e => {
+    if (e.error === "interrupted" || e.error === "canceled") return;
+    if (e.error === "synthesis-failed" && level < 2) return speak(text, style, level + 1);
+    showMsg("Speech failed: " + e.error + ". " + VOICE_HELP);
+  };
   // A new reaction cuts off the old one. Some Chrome builds drop a line spoken right after cancel(),
   // so only cancel when something is actually playing, and give it a moment before speaking.
   if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(() => synth.speak(u), 80); }
@@ -685,7 +702,7 @@ el.mSport.addEventListener("click", () => cfg.mode !== "sport" && setMode("sport
 el.sens.addEventListener("input", () => { cfg.sens = +el.sens.value; el.sensVal.textContent = cfg.sens; store.set("sens", cfg.sens); });
 el.pitch.addEventListener("input", () => { cfg.pitch = +el.pitch.value; el.pitchVal.textContent = (cfg.pitch > 0 ? "+" : "") + cfg.pitch.toFixed(1); store.set("pitch", cfg.pitch); });
 el.vol.addEventListener("input", () => { cfg.vol = +el.vol.value; el.volVal.textContent = Math.round(cfg.vol * 100) + "%"; store.set("vol", cfg.vol); });
-el.voice.addEventListener("change", () => { cfg.voice = el.voice.value; store.set("voice", cfg.voice); say("start"); });
+el.voice.addEventListener("change", () => { cfg.voice = el.voice.value; store.set("voice", cfg.voice); speechLevel = 0; say("start"); });
 el.gps.addEventListener("change", () => { cfg.gps = el.gps.checked; store.set("gps", cfg.gps); if (S.running) cfg.gps ? startGps() : stopGps(); });
 el.flip.addEventListener("change", () => { cfg.flip = el.flip.checked; store.set("flip", cfg.flip); });
 el.teach.addEventListener("click", () => (S.teach ? teachEnd() : teachStart()));
