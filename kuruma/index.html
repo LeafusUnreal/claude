@@ -147,6 +147,7 @@ footer { font-size: 12px; color: var(--dim); }
       <div class="field">
         <label for="voice"><span>Japanese voice</span></label>
         <select id="voice"></select>
+        <p class="hint" id="voiceInfo"></p>
       </div>
       <div class="field">
         <label for="pitch"><span>Voice pitch</span><span id="pitchVal">0</span></label>
@@ -294,16 +295,20 @@ const el = {
   mNormal: $("mNormal"), mSport: $("mSport"), go: $("go"), msg: $("msg"),
   sens: $("sens"), sensVal: $("sensVal"), voice: $("voice"), pitch: $("pitch"), pitchVal: $("pitchVal"),
   vol: $("vol"), volVal: $("volVal"), gps: $("gps"), flip: $("flip"), teach: $("teach"), resetFwd: $("resetFwd"),
-  fwdHint: $("fwdHint"), log: $("log"),
+  fwdHint: $("fwdHint"), log: $("log"), voiceInfo: $("voiceInfo"),
 };
 
 /* ---------- Speech ---------- */
 const synth = window.speechSynthesis;
+const VOICE_HELP = "Check the volume (media volume, not ringer) and the iPhone silent switch. Android: Settings → Text-to-speech → Google → install Japanese. iPhone: Settings → Accessibility → Spoken Content → Voices → Japanese.";
 let jaVoices = [];
 function loadVoices() {
   if (!synth) return;
   jaVoices = synth.getVoices().filter(v => /^ja\b|^ja[-_]/i.test(v.lang));
   el.voice.innerHTML = "";
+  el.voiceInfo.textContent = jaVoices.length
+    ? jaVoices.length + " Japanese voice" + (jaVoices.length > 1 ? "s" : "") + " found."
+    : "No Japanese voice found on this device. " + VOICE_HELP;
   if (!jaVoices.length) {
     el.voice.add(new Option("System default (ja-JP)", ""));
   } else {
@@ -342,8 +347,13 @@ function say(setName) {
   u.pitch = Math.max(0, Math.min(2, style.pitch + Number(cfg.pitch)));
   u.rate = style.rate;
   u.volume = Number(cfg.vol);
-  synth.cancel();          // a new reaction always cuts off the old one
-  synth.speak(u);
+  u.onstart = () => showMsg("");
+  u.onerror = e => { if (e.error !== "interrupted" && e.error !== "canceled") showMsg("Speech failed: " + e.error + ". " + VOICE_HELP); };
+  // A new reaction cuts off the old one. Some Chrome builds drop a line spoken right after cancel(),
+  // so only cancel when something is actually playing, and give it a moment before speaking.
+  if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(() => synth.speak(u), 80); }
+  else synth.speak(u);
+  if (synth.paused) synth.resume();
 }
 
 function addLog(ja, en) {
